@@ -61,7 +61,9 @@ def test_transaction_model_from_raw_data():
         "ZORIGINALAMOUNT": -50.00,
     }
 
-    transaction = TransactionModel.from_raw_data(raw_data)
+    transaction = TransactionModel.from_raw_data(
+        raw_data, entity_id_to_type={37: TransactionType.DEPOSIT}
+    )
 
     assert transaction.id == "123"
     assert transaction.entity_id == 37
