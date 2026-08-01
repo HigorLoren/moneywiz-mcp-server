@@ -125,6 +125,7 @@ async def test_transaction_service_get_transactions():
     """Test TransactionService get_transactions method."""
     # Mock database manager
     mock_db = AsyncMock()
+    mock_db.get_entity_name_map.return_value = {"DepositTransaction": 37}
     mock_db.execute_query.return_value = [
         {
             "Z_PK": 1,

@@ -43,6 +43,11 @@ class AccountService:
             if name in entity_map
         ]
         txn_placeholders = ",".join("?" for _ in transaction_entity_ids)
+        if not transaction_entity_ids:
+            logger.warning(
+                "No transaction entity ids resolved for this database - "
+                "account balances will only reflect the opening balance"
+            )
 
         accounts_data = []
         for entity_id in account_entities:
@@ -70,14 +75,16 @@ class AccountService:
 
                 # Calculate balance
                 opening_balance = account.get("ZOPENINGBALANCE", 0)
-                # nosec: B608 - safe placeholder substitution
-                balance_query = (
-                    "SELECT SUM(ZAMOUNT1) as total FROM ZSYNCOBJECT "
-                    f"WHERE Z_ENT IN ({txn_placeholders}) AND ZACCOUNT2 = ?"
-                )
-                balance_result = await self.db_manager.execute_query(
-                    balance_query, (*transaction_entity_ids, account["Z_PK"])
-                )
+                balance_result = []
+                if transaction_entity_ids:
+                    # nosec: B608 - safe placeholder substitution
+                    balance_query = (
+                        "SELECT SUM(ZAMOUNT1) as total FROM ZSYNCOBJECT "
+                        f"WHERE Z_ENT IN ({txn_placeholders}) AND ZACCOUNT2 = ?"
+                    )
+                    balance_result = await self.db_manager.execute_query(
+                        balance_query, (*transaction_entity_ids, account["Z_PK"])
+                    )
                 transaction_total = (
                     balance_result[0]["total"]
                     if balance_result and balance_result[0]["total"]

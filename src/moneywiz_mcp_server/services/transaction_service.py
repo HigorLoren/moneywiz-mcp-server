@@ -171,6 +171,13 @@ class TransactionService:
                 # Include all known transaction types by default
                 transaction_entities = list(type_to_entity_id.values())
 
+            if not transaction_entities:
+                logger.warning(
+                    "No matching transaction entity ids resolved for this "
+                    "database - returning no transactions"
+                )
+                return []
+
             # Build WHERE conditions using safe parameter substitution
             entity_placeholders = ",".join("?" for _ in transaction_entities)
             where_conditions = [
@@ -594,14 +601,16 @@ class TransactionService:
             # Get account currency if not cached
             if transaction.account_id not in self._account_currency_cache:
                 account_entity_ids = await self._get_account_entity_ids()
-                account_placeholders = ",".join("?" for _ in account_entity_ids)
-                account_query = f"""
-                SELECT ZCURRENCYNAME FROM ZSYNCOBJECT
-                WHERE Z_ENT IN ({account_placeholders}) AND Z_PK = ?
-                """  # nosec: B608 - safe placeholder substitution
-                account_result = await self.db_manager.execute_query(
-                    account_query, (*account_entity_ids, transaction.account_id)
-                )
+                account_result = []
+                if account_entity_ids:
+                    account_placeholders = ",".join("?" for _ in account_entity_ids)
+                    account_query = f"""
+                    SELECT ZCURRENCYNAME FROM ZSYNCOBJECT
+                    WHERE Z_ENT IN ({account_placeholders}) AND Z_PK = ?
+                    """  # nosec: B608 - safe placeholder substitution
+                    account_result = await self.db_manager.execute_query(
+                        account_query, (*account_entity_ids, transaction.account_id)
+                    )
                 if account_result:
                     self._account_currency_cache[transaction.account_id] = (
                         account_result[0]["ZCURRENCYNAME"]
@@ -1024,6 +1033,10 @@ class TransactionService:
         """
         internal_ids: list[int] = []
         account_entity_ids = await self._get_account_entity_ids()
+        if not account_entity_ids:
+            raise ValueError(
+                "No account entity ids could be resolved for this database"
+            )
         account_placeholders = ",".join("?" for _ in account_entity_ids)
 
         for external_id in external_account_ids:
