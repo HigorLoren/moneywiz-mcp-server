@@ -44,6 +44,45 @@ def test_parse_natural_language_date():
     assert date_range.start_date.day == 1
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_days"),
+    [
+        ("last 9 months", 9 * 30),
+        ("last 20 months", 20 * 30),
+        ("last 24 months", 24 * 30),
+        ("last 48 months", 48 * 30),
+        ("last 2 years", 2 * 12 * 30),
+    ],
+)
+def test_parse_natural_language_date_arbitrary_month_and_year_counts(
+    text, expected_days
+):
+    """Counts outside the old hardcoded {3, 6, 12} set must resolve correctly."""
+    date_range = parse_natural_language_date(text)
+    expected_start = datetime.now() - timedelta(days=expected_days)
+    assert abs((date_range.start_date - expected_start).days) <= 1
+
+
+def test_parse_natural_language_date_bare_year():
+    date_range = parse_natural_language_date("2023")
+    assert date_range.start_date == datetime(2023, 1, 1)
+    assert date_range.end_date == datetime(2023, 12, 31, 23, 59, 59)
+
+    date_range = parse_natural_language_date("in 2023")
+    assert date_range.start_date == datetime(2023, 1, 1)
+
+
+def test_parse_natural_language_date_month_year():
+    date_range = parse_natural_language_date("January 2023")
+    assert date_range.start_date == datetime(2023, 1, 1)
+    assert date_range.end_date == datetime(2023, 1, 31, 23, 59, 59)
+
+
+def test_parse_natural_language_date_invalid_raises():
+    with pytest.raises(ValueError, match="Could not parse time period"):
+        parse_natural_language_date("banana")
+
+
 def test_transaction_model_from_raw_data():
     """Test TransactionModel creation from raw data."""
     raw_data = {

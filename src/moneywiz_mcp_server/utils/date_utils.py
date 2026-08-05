@@ -1,8 +1,29 @@
 """Date utility functions for MoneyWiz MCP Server."""
 
+import calendar
 from datetime import datetime, timedelta
+import re
 
 from moneywiz_mcp_server.models.transaction import DateRange
+
+_MONTH_NAMES = {
+    "jan": 1, "january": 1,
+    "feb": 2, "february": 2,
+    "mar": 3, "march": 3,
+    "apr": 4, "april": 4,
+    "may": 5,
+    "jun": 6, "june": 6,
+    "jul": 7, "july": 7,
+    "aug": 8, "august": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10,
+    "nov": 11, "november": 11,
+    "dec": 12, "december": 12,
+}
+
+_RELATIVE_UNIT_RE = re.compile(r"last\s+(\d+)\s+(day|days|month|months|year|years)")
+_YEAR_ONLY_RE = re.compile(r"(?:in\s+)?(\d{4})")
+_MONTH_YEAR_RE = re.compile(r"([a-z]+)\s+(\d{4})")
 
 
 def get_date_range_from_months(months: int) -> DateRange:
@@ -47,44 +68,83 @@ def parse_natural_language_date(text: str) -> DateRange:
     Returns:
         DateRange corresponding to the expression
 
+    Raises:
+        ValueError: If the expression doesn't match any supported format
+
     Examples:
         "last 3 months" -> DateRange for last 3 months
-        "last month" -> DateRange for last month
-        "this year" -> DateRange for current year
+        "last 45 days" -> DateRange for last 45 days
+        "last month"/"last year" -> DateRange for the preceding period
+        "this year"/"this month" -> DateRange for the current period
+        "2023" / "in 2023" -> DateRange spanning that calendar year
+        "January 2023" -> DateRange spanning that calendar month
     """
+    original = text
     text = text.lower().strip()
 
-    if "last" in text and "month" in text:
-        if "3" in text:
-            return get_date_range_from_months(3)
-        elif "6" in text:
-            return get_date_range_from_months(6)
-        elif "12" in text:
-            return get_date_range_from_months(12)
-        else:
-            return get_date_range_from_months(1)
-
-    elif "last" in text and "day" in text:
-        if "30" in text:
-            return get_date_range_from_days(30)
-        elif "90" in text:
-            return get_date_range_from_days(90)
-        else:
-            return get_date_range_from_days(7)
-
-    elif "this year" in text:
+    if text == "this year":
         now = datetime.now()
-        start_date = datetime(now.year, 1, 1)
-        return DateRange(start_date=start_date, end_date=now)
+        return DateRange(start_date=datetime(now.year, 1, 1), end_date=now)
 
-    elif "this month" in text:
+    if text == "this month":
         now = datetime.now()
-        start_date = datetime(now.year, now.month, 1)
-        return DateRange(start_date=start_date, end_date=now)
+        return DateRange(start_date=datetime(now.year, now.month, 1), end_date=now)
 
+    if text == "last month":
+        return get_date_range_from_months(1)
+
+    if text == "last week":
+        return get_date_range_from_days(7)
+
+    if text == "last year":
+        return get_date_range_from_months(12)
+
+    relative_match = _RELATIVE_UNIT_RE.search(text)
+    if relative_match:
+        count = int(relative_match.group(1))
+        unit = relative_match.group(2)
+        if unit in ("day", "days"):
+            return get_date_range_from_days(count)
+        if unit in ("month", "months"):
+            return get_date_range_from_months(count)
+        return get_date_range_from_months(count * 12)  # year/years
+
+    year_match = _YEAR_ONLY_RE.fullmatch(text)
+    if year_match:
+        return _year_date_range(int(year_match.group(1)))
+
+    month_year_match = _MONTH_YEAR_RE.fullmatch(text)
+    if month_year_match and month_year_match.group(1) in _MONTH_NAMES:
+        month = _MONTH_NAMES[month_year_match.group(1)]
+        year = int(month_year_match.group(2))
+        return _month_date_range(year, month)
+
+    raise ValueError(
+        f"Could not parse time period '{original}'. Supported formats: "
+        "'last N days/months/years', 'last week/month/year', 'this month', "
+        "'this year', a bare year like '2023', or 'Month YYYY' like "
+        "'January 2023'."
+    )
+
+
+def _year_date_range(year: int) -> DateRange:
+    """Build a DateRange spanning a calendar year, capped at now."""
+    now = datetime.now()
+    start_date = datetime(year, 1, 1)
+    end_date = now if year >= now.year else datetime(year, 12, 31, 23, 59, 59)
+    return DateRange(start_date=start_date, end_date=end_date)
+
+
+def _month_date_range(year: int, month: int) -> DateRange:
+    """Build a DateRange spanning a calendar month, capped at now."""
+    now = datetime.now()
+    start_date = datetime(year, month, 1)
+    if (year, month) >= (now.year, now.month):
+        end_date = now
     else:
-        # Default to last 3 months
-        return get_date_range_from_months(3)
+        last_day = calendar.monthrange(year, month)[1]
+        end_date = datetime(year, month, last_day, 23, 59, 59)
+    return DateRange(start_date=start_date, end_date=end_date)
 
 
 def core_data_timestamp_to_datetime(timestamp: float) -> datetime:
