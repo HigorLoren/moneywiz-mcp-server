@@ -22,6 +22,7 @@ from moneywiz_mcp_server.services.category_classification_service import (
     CategoryType,
 )
 from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
+from moneywiz_mcp_server.utils.text_utils import normalize_category_name
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +225,11 @@ class TransactionService:
             # Convert to TransactionModel objects
             transactions: list[TransactionModel] = []
             category_filtered_count = 0
+            normalized_categories = (
+                {normalize_category_name(c) for c in categories}
+                if categories
+                else None
+            )
             for row in rows:
                 try:
                     transaction = TransactionModel.from_raw_data(
@@ -234,21 +240,29 @@ class TransactionService:
                     transaction = await self._enhance_transaction(transaction)
 
                     # Apply category filter if specified
-                    if categories:
+                    if normalized_categories:
                         # Check if any category in the hierarchy matches the filter
                         category_matches = False
 
                         # Check leaf category
-                        if transaction.category in categories or (
+                        if (
+                            transaction.category
+                            and normalize_category_name(transaction.category)
+                            in normalized_categories
+                        ) or (
                             transaction.parent_category
-                            and transaction.parent_category in categories
+                            and normalize_category_name(transaction.parent_category)
+                            in normalized_categories
                         ):
                             category_matches = True
 
                         # Check all categories in hierarchy
                         elif transaction.category_hierarchy:
                             for cat in transaction.category_hierarchy:
-                                if cat in categories:
+                                if (
+                                    normalize_category_name(cat)
+                                    in normalized_categories
+                                ):
                                     category_matches = True
                                     break
 

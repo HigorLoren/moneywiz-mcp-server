@@ -16,6 +16,7 @@ from moneywiz_mcp_server.models.budget import (
     BudgetVsActualResponse,
 )
 from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
+from moneywiz_mcp_server.utils.text_utils import normalize_category_name
 
 logger = logging.getLogger(__name__)
 
@@ -278,10 +279,15 @@ class BudgetService:
     ) -> bool:
         """Check if budget matches the specified filters."""
         # Category filter
-        if categories and not any(
-            cat.lower() in [c.lower() for c in budget.categories] for cat in categories
-        ):
-            return False
+        if categories:
+            budget_categories = {
+                normalize_category_name(c).lower() for c in budget.categories
+            }
+            if not any(
+                normalize_category_name(cat).lower() in budget_categories
+                for cat in categories
+            ):
+                return False
 
         # Period filter
         if period and budget.period.value.lower() != period.lower():

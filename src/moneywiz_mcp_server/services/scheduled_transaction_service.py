@@ -18,6 +18,7 @@ from moneywiz_mcp_server.models.scheduled_transaction import (
 )
 from moneywiz_mcp_server.models.transaction import TransactionType
 from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
+from moneywiz_mcp_server.utils.text_utils import normalize_category_name
 
 logger = logging.getLogger(__name__)
 
@@ -314,7 +315,9 @@ class ScheduledTransactionService:
         if account_ids and transaction.account_id not in account_ids:
             return False
 
-        if categories and transaction.category not in categories:
+        if categories and normalize_category_name(transaction.category) not in {
+            normalize_category_name(c) for c in categories
+        }:
             return False
 
         if commitment_types and transaction.commitment_type not in commitment_types:

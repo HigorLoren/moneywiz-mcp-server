@@ -317,6 +317,36 @@ class TestScheduledTransactionService:
             result is True
         )  # Transaction has end_condition=NEVER, so commitment_type="infinite"
 
+    @pytest.mark.asyncio
+    async def test_matches_filters_category_nbsp_match(self, scheduled_service):
+        """Category names with non-breaking spaces should still match normal-space filters."""
+        transaction = ScheduledTransactionModel(
+            id="123",
+            description="Test Transaction",
+            amount=Decimal("100.00"),
+            currency="USD",
+            account_id="acc1",
+            category="Parking\xa0&\xa0Tolls",
+            payee="Store",
+            transaction_type=TransactionType.WITHDRAW,
+            recurrence_pattern=RecurrencePattern.MONTHLY,
+            next_execution_date=datetime.now(),
+            end_condition=RecurrenceEndCondition.NEVER,
+            completed_occurrences=0,
+            is_active=True,
+            created_date=datetime.now(),
+            entity_type=32,
+            database_id=123,
+        )
+
+        result = await scheduled_service._matches_filters(
+            transaction,
+            account_ids=None,
+            categories=["Parking & Tolls"],
+            commitment_types=None,
+        )
+        assert result is True
+
     def test_generate_salary_recommendations(self, scheduled_service):
         """Test salary recommendation generation."""
         from moneywiz_mcp_server.models.scheduled_transaction import CommitmentBreakdown

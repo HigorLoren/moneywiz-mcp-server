@@ -318,5 +318,50 @@ class TestCategoryResolution:
             print(f"  Entity {entity['Z_ENT']}: {entity['count']} records")
 
 
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_category_filter_matches_names_with_nbsp(self, real_db_manager):
+        """search_transactions' category filter must match names MoneyWiz
+        stores with non-breaking spaces (e.g. around "&") even when the
+        caller types a normal space.
+        """
+        entity_map = await real_db_manager.get_entity_name_map()
+        category_entity_id = entity_map["Category"]
+
+        nbsp_category_query = """
+        SELECT ZNAME2 FROM ZSYNCOBJECT
+        WHERE Z_ENT = ? AND ZNAME2 LIKE '%' || CHAR(160) || '%'
+        LIMIT 1
+        """
+        rows = await real_db_manager.execute_query(
+            nbsp_category_query, (category_entity_id,)
+        )
+        if not rows:
+            pytest.skip("No NBSP-containing category names in this database")
+
+        stored_name = rows[0]["ZNAME2"]
+        normal_space_name = " ".join(stored_name.split())
+        assert normal_space_name != stored_name, (
+            "Fixture category should actually contain a non-regular space"
+        )
+
+        transaction_service = TransactionService(real_db_manager)
+        from datetime import datetime
+
+        transactions = await transaction_service.get_transactions(
+            start_date=datetime(2000, 1, 1),
+            end_date=datetime.now(),
+            categories=[normal_space_name],
+            limit=5,
+        )
+
+        assert any(
+            " ".join(t.category.split()) == normal_space_name for t in transactions
+        ), (
+            f"Expected at least one transaction matching category "
+            f"'{normal_space_name}' (stored as {stored_name!r})"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])  # -s to see print statements

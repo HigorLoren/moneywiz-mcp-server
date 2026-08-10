@@ -243,6 +243,21 @@ class TestBudgetServiceFilters:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_matches_filters_category_nbsp_match(self, budget_service):
+        """Category names with non-breaking spaces should still match normal-space filters."""
+        budget = BudgetModel(
+            id="1",
+            budget_amount=Decimal("100"),
+            currency="USD",
+            period=BudgetPeriod.MONTHLY,
+            categories=["Parking\xa0&\xa0Tolls"],
+        )
+        result = await budget_service._matches_filters(
+            budget, ["Parking & Tolls"], None
+        )
+        assert result is True
+
+    @pytest.mark.asyncio
     async def test_matches_filters_period_match(self, budget_service):
         """Test period filter matching."""
         budget = BudgetModel(
